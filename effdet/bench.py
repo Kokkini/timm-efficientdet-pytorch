@@ -35,14 +35,13 @@ def _post_process(config, cls_outputs, box_outputs):
     _, cls_topk_indices_all = torch.topk(cls_outputs_all.reshape(batch_size, -1), dim=1, k=MAX_DETECTION_POINTS)
     indices_all = cls_topk_indices_all / config.num_classes
     classes_all = cls_topk_indices_all % config.num_classes
-
     box_outputs_all_after_topk = torch.gather(
-        box_outputs_all, 1, indices_all.unsqueeze(2).expand(-1, -1, 4))
+        box_outputs_all, 1, indices_all.unsqueeze(2).expand(-1, -1, 4).to(torch.int64))
 
     cls_outputs_all_after_topk = torch.gather(
-        cls_outputs_all, 1, indices_all.unsqueeze(2).expand(-1, -1, config.num_classes))
+        cls_outputs_all, 1, indices_all.unsqueeze(2).expand(-1, -1, config.num_classes).to(torch.int64))
     cls_outputs_all_after_topk = torch.gather(
-        cls_outputs_all_after_topk, 2, classes_all.unsqueeze(2))
+        cls_outputs_all_after_topk, 2, classes_all.unsqueeze(2).to(torch.int64))
 
     return cls_outputs_all_after_topk, box_outputs_all_after_topk, indices_all, classes_all
 
@@ -75,11 +74,11 @@ class DetBenchTrain(nn.Module):
         super(DetBenchTrain, self).__init__()
         self.config = config
         self.model = model
-        anchors = Anchors(
+        self.anchors = Anchors(
             config.min_level, config.max_level,
             config.num_scales, config.aspect_ratios,
             config.anchor_scale, config.image_size)
-        self.anchor_labeler = AnchorLabeler(anchors, config.num_classes, match_threshold=0.5)
+        self.anchor_labeler = AnchorLabeler(self.anchors, config.num_classes, match_threshold=0.5)
         self.loss_fn = DetectionLoss(self.config)
 
     def forward(self, x, gt_boxes, gt_labels, include_pred=False):
@@ -101,7 +100,7 @@ class DetBenchTrain(nn.Module):
             # FIXME we may be able to do this as a batch with some tensor reshaping/indexing, PR welcome
             for i in range(x.shape[0]):
                 detections = generate_detections(
-                    class_out_pred[i], box_out_pred[i], self.anchors.boxes, indices[i], classes[i], image_scales[i])
+                    class_out_pred[i], box_out_pred[i], self.anchors.boxes, indices[i].to(torch.int64), classes[i], 1)
                 batch_detections.append(detections)
             return (torch.stack(batch_detections, dim=0),) + losses
 
