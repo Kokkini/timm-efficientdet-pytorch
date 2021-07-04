@@ -82,8 +82,9 @@ class DetBenchTrain(nn.Module):
         self.anchor_labeler = AnchorLabeler(anchors, config.num_classes, match_threshold=0.5)
         self.loss_fn = DetectionLoss(self.config)
 
-    def forward(self, x, gt_boxes, gt_labels):
+    def forward(self, x, gt_boxes, gt_labels, include_pred=False):
         class_out, box_out = self.model(x)
+        class_out_pred, box_out_pred, indices, classes = _post_process(self.config, class_out, box_out)
 
         cls_targets = []
         box_targets = []
@@ -94,5 +95,14 @@ class DetBenchTrain(nn.Module):
             cls_targets.append(gt_class_out)
             box_targets.append(gt_box_out)
             num_positives.append(num_positive)
+        losses = self.loss_fn(class_out, box_out, cls_targets, box_targets, num_positives)
+        if include_pred:
+            batch_detections = []
+            # FIXME we may be able to do this as a batch with some tensor reshaping/indexing, PR welcome
+            for i in range(x.shape[0]):
+                detections = generate_detections(
+                    class_out_pred[i], box_out_pred[i], self.anchors.boxes, indices[i], classes[i], image_scales[i])
+                batch_detections.append(detections)
+            return (torch.stack(batch_detections, dim=0),) + losses
 
-        return class_out, box_out, self.loss_fn(class_out, box_out, cls_targets, box_targets, num_positives)
+        return losses
