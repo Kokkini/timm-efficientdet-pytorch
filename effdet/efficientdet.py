@@ -466,7 +466,7 @@ class EfficientDet(nn.Module):
 
 class EfficientDetCls(nn.Module):
     def __init__(self, config, norm_kwargs=None, pretrained_backbone=True):
-        super(EfficientDet, self).__init__()
+        super(EfficientDetCls, self).__init__()
         norm_kwargs = norm_kwargs or dict(eps=.001, momentum=.01)
         self.backbone = create_model(
             config.backbone_name, features_only=True, out_indices=(2, 3, 4),

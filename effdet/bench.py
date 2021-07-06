@@ -108,7 +108,7 @@ class DetBenchTrain(nn.Module):
 
 class DetBenchTrain0Box(nn.Module):
     def __init__(self, model, config):
-        super(DetBenchTrain, self).__init__()
+        super(DetBenchTrain0Box, self).__init__()
         self.config = config
         self.model = model
         self.anchors = Anchors(
@@ -150,7 +150,7 @@ class DetBenchTrain0Box(nn.Module):
 
 class DetBenchTrainClsAndDet(nn.Module):
     def __init__(self, model, config):
-        super(DetBenchTrain, self).__init__()
+        super(DetBenchTrainClsAndDet, self).__init__()
         self.config = config
         self.model = model
         self.anchors = Anchors(
