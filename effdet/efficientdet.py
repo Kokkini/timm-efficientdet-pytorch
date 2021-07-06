@@ -11,6 +11,8 @@ import logging
 import math
 from collections import OrderedDict
 from typing import List
+
+from torch.nn.modules.dropout import Dropout
 from timm import create_model
 from timm.models.layers import create_conv2d, drop_path, create_pool2d, Swish
 
@@ -353,6 +355,19 @@ class HeadNet(nn.Module):
             outputs.append(self.predict(x_level))
         return outputs
 
+class ClassificationHead(nn.Module):
+    def __init__(self, num_classes):
+        super(ClassificationHead, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
+        self.model = nn.Sequential(
+          nn.AdaptiveAvgPool2d(output_size=1),
+          nn.Dropout(p=0.4, inplace=False),
+          nn.Linear(512, num_classes, bias=True)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
 
 def _init_weight(m, n='', ):
     """ Weight initialization as per Tensorflow official implementations.
@@ -446,3 +461,31 @@ class EfficientDet(nn.Module):
         x_class = self.class_net(x)
         x_box = self.box_net(x)
         return x_class, x_box
+
+
+
+class EfficientDetCls(nn.Module):
+    def __init__(self, config, norm_kwargs=None, pretrained_backbone=True):
+        super(EfficientDet, self).__init__()
+        norm_kwargs = norm_kwargs or dict(eps=.001, momentum=.01)
+        self.backbone = create_model(
+            config.backbone_name, features_only=True, out_indices=(2, 3, 4),
+            pretrained=pretrained_backbone, **config.backbone_args)
+        feature_info = [dict(num_chs=f['num_chs'], reduction=f['reduction'])
+                        for i, f in enumerate(self.backbone.feature_info())]
+        self.fpn = BiFpn(config, feature_info, norm_kwargs=norm_kwargs)
+        self.class_net = HeadNet(config, num_outputs=config.num_classes, norm_kwargs=norm_kwargs)
+        self.box_net = HeadNet(config, num_outputs=4, norm_kwargs=norm_kwargs)
+        self.classification = ClassificationHead(config.num_classes)
+
+        for n, m in self.named_modules():
+            if 'backbone' not in n:
+                _init_weight(m, n)
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = self.fpn(x)
+        x_class = self.class_net(x)
+        x_box = self.box_net(x)
+        x_classification = self.classification(x)
+        return x_class, x_box, x_classification
