@@ -476,7 +476,7 @@ class EfficientDetCls(nn.Module):
         self.fpn = BiFpn(config, feature_info, norm_kwargs=norm_kwargs)
         self.class_net = HeadNet(config, num_outputs=config.num_classes, norm_kwargs=norm_kwargs)
         self.box_net = HeadNet(config, num_outputs=4, norm_kwargs=norm_kwargs)
-        self.classification = ClassificationHead(config.num_classes)
+        self.classification = ClassificationHead(config.num_classification_classes)
 
         for n, m in self.named_modules():
             if 'backbone' not in n:

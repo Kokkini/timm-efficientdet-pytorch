@@ -106,6 +106,48 @@ class DetBenchTrain(nn.Module):
 
         return losses
 
+class DetBenchTrain0Box(nn.Module):
+    def __init__(self, model, config):
+        super(DetBenchTrain, self).__init__()
+        self.config = config
+        self.model = model
+        self.anchors = Anchors(
+            config.min_level, config.max_level,
+            config.num_scales, config.aspect_ratios,
+            config.anchor_scale, config.image_size)
+        self.anchor_labeler = AnchorLabeler(self.anchors, config.num_classes, match_threshold=0.5)
+        self.loss_fn = DetectionLoss(self.config)
+
+    def forward(self, x, gt_boxes, gt_labels, has_box, include_pred=False):
+        class_out, box_out = self.model(x)
+        has_box = torch.reshape(has_box, (-1, 1, 1, 1))
+        for i in range(len(class_out)):
+            class_out[i] *= has_box
+        for i in range(len(box_out)):
+            box_out[i] *= has_box
+        class_out_pred, box_out_pred, indices, classes = _post_process(self.config, class_out, box_out)
+
+        cls_targets = []
+        box_targets = []
+        num_positives = []
+        # FIXME this may be a bottleneck, would be faster if batched, or should be done in loader/dataset?
+        for i in range(x.shape[0]):
+            gt_class_out, gt_box_out, num_positive = self.anchor_labeler.label_anchors(gt_boxes[i], gt_labels[i])
+            cls_targets.append(gt_class_out)
+            box_targets.append(gt_box_out)
+            num_positives.append(num_positive)
+        losses = self.loss_fn(class_out, box_out, cls_targets, box_targets, num_positives)
+        if include_pred:
+            batch_detections = []
+            # FIXME we may be able to do this as a batch with some tensor reshaping/indexing, PR welcome
+            for i in range(x.shape[0]):
+                detections = generate_detections(
+                    class_out_pred[i], box_out_pred[i], self.anchors.boxes, indices[i].to(torch.int64), classes[i], 1)
+                batch_detections.append(detections)
+            return (torch.stack(batch_detections, dim=0),) + losses
+
+        return losses
+
 class DetBenchTrainClsAndDet(nn.Module):
     def __init__(self, model, config):
         super(DetBenchTrain, self).__init__()
@@ -118,9 +160,14 @@ class DetBenchTrainClsAndDet(nn.Module):
         self.anchor_labeler = AnchorLabeler(self.anchors, config.num_classes, match_threshold=0.5)
         self.loss_fn = DetectionClassificationLoss(self.config)
 
-    def forward(self, x, gt_boxes, gt_labels, gt_classifications, include_pred=False):
+    def forward(self, x, gt_boxes, gt_labels, gt_classifications, has_box, include_pred=False):
         class_out, box_out, classification_out = self.model(x)
         class_out_pred, box_out_pred, indices, classes = _post_process(self.config, class_out, box_out)
+        
+        for i in range(len(class_out)):
+            class_out[i] *= has_box
+        for i in range(len(box_out)):
+            box_out[i] *= has_box
 
         cls_targets = []
         box_targets = []
