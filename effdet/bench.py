@@ -120,11 +120,6 @@ class DetBenchTrain0Box(nn.Module):
 
     def forward(self, x, gt_boxes, gt_labels, has_box, include_pred=False):
         class_out, box_out = self.model(x)
-        has_box = torch.reshape(has_box, (-1, 1, 1, 1))
-        for i in range(len(class_out)):
-            class_out[i] *= has_box
-        for i in range(len(box_out)):
-            box_out[i] *= has_box
         class_out_pred, box_out_pred, indices, classes = _post_process(self.config, class_out, box_out)
 
         cls_targets = []
@@ -136,7 +131,7 @@ class DetBenchTrain0Box(nn.Module):
             cls_targets.append(gt_class_out)
             box_targets.append(gt_box_out)
             num_positives.append(num_positive)
-        losses = self.loss_fn(class_out, box_out, cls_targets, box_targets, num_positives)
+        losses = self.loss_fn(class_out, box_out, cls_targets, box_targets, num_positives, has_box=has_box)
         if include_pred:
             batch_detections = []
             # FIXME we may be able to do this as a batch with some tensor reshaping/indexing, PR welcome
@@ -162,13 +157,6 @@ class DetBenchTrainClsAndDet(nn.Module):
 
     def forward(self, x, gt_boxes, gt_labels, gt_classifications, has_box, include_pred=False):
         class_out, box_out, classification_out = self.model(x)
-        has_box = torch.reshape(has_box, (-1, 1, 1, 1))
-        
-        for i in range(len(class_out)):
-            class_out[i] *= has_box
-        for i in range(len(box_out)):
-            box_out[i] *= has_box
-            
         class_out_pred, box_out_pred, indices, classes = _post_process(self.config, class_out, box_out)
         
         cls_targets = []
@@ -180,7 +168,7 @@ class DetBenchTrainClsAndDet(nn.Module):
             cls_targets.append(gt_class_out)
             box_targets.append(gt_box_out)
             num_positives.append(num_positive)
-        losses = self.loss_fn(class_out, box_out, classification_out, cls_targets, box_targets, gt_classifications, num_positives)
+        losses = self.loss_fn(class_out, box_out, classification_out, cls_targets, box_targets, gt_classifications, num_positives, has_box=has_box)
         if include_pred:
             batch_detections = []
             # FIXME we may be able to do this as a batch with some tensor reshaping/indexing, PR welcome

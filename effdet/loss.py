@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def focal_loss(logits, targets, alpha, gamma, normalizer):
+def focal_loss(logits, targets, alpha, gamma, normalizer, has_box=None):
     """Compute the focal loss between `logits` and the golden `target` values.
 
     Focal loss = -(1-pt)^gamma * log(pt)
@@ -61,10 +61,12 @@ def focal_loss(logits, targets, alpha, gamma, normalizer):
     loss = modulator * cross_entropy
     weighted_loss = torch.where(positive_label_mask, alpha * loss, (1.0 - alpha) * loss)
     weighted_loss /= normalizer
+    if has_box is not None:
+        weighted_loss *= has_box
     return weighted_loss
 
 
-def huber_loss(input, target, delta=1., weights=None, size_average=True):
+def huber_loss(input, target, delta=1., weights=None, size_average=True, has_box=None):
     """
     """
     err = input - target
@@ -74,6 +76,8 @@ def huber_loss(input, target, delta=1., weights=None, size_average=True):
     loss = 0.5 * quadratic.pow(2) + delta * linear
     if weights is not None:
         loss *= weights
+    if has_box is not None:
+        loss *= has_box
     return loss.mean() if size_average else loss.sum()
 
 
@@ -96,10 +100,10 @@ def smooth_l1_loss(input, target, beta=1. / 9, weights=None, size_average=True):
     return loss.mean() if size_average else loss.sum()
 
 
-def _class_loss(cls_outputs, cls_targets, num_positives, alpha=0.25, gamma=2.0):
+def _class_loss(cls_outputs, cls_targets, num_positives, alpha=0.25, gamma=2.0, has_box=None):
     """Computes box classification loss."""
     normalizer = num_positives
-    classification_loss = focal_loss(cls_outputs, cls_targets, alpha, gamma, normalizer)
+    classification_loss = focal_loss(cls_outputs, cls_targets, alpha, gamma, normalizer, has_box=has_box)
     return classification_loss
 
 # def _classification_loss(classification_outputs, classification_targets):
@@ -107,14 +111,14 @@ def _class_loss(cls_outputs, cls_targets, num_positives, alpha=0.25, gamma=2.0):
 #     classification_loss = focal_loss(classification_outputs, classification_targets)
 #     return classification_loss
 
-def _box_loss(box_outputs, box_targets, num_positives, delta=0.1):
+def _box_loss(box_outputs, box_targets, num_positives, delta=0.1, has_box=None):
     """Computes box regression loss."""
     # delta is typically around the mean value of regression target.
     # for instances, the regression targets of 512x512 input with 6 anchors on
     # P3-P7 pyramid is about [0.1, 0.1, 0.2, 0.2].
     normalizer = num_positives * 4.0
     mask = box_targets != 0.0
-    box_loss = huber_loss(box_targets, box_outputs, weights=mask, delta=delta, size_average=False)
+    box_loss = huber_loss(box_targets, box_outputs, weights=mask, delta=delta, size_average=False, has_box=has_box)
     box_loss /= normalizer
     return box_loss
 
@@ -129,7 +133,7 @@ class DetectionLoss(nn.Module):
         self.delta = config.delta
         self.box_loss_weight = config.box_loss_weight
 
-    def forward(self, cls_outputs, box_outputs, cls_targets, box_targets, num_positives):
+    def forward(self, cls_outputs, box_outputs, cls_targets, box_targets, num_positives, has_box=None):
         """Computes total detection loss.
         Computes total detection loss including box and class loss from all levels.
         Args:
@@ -159,7 +163,8 @@ class DetectionLoss(nn.Module):
         else:
             # targets are already tensors
             stack_targets = False
-
+        
+        has_box = torch.reshape(has_box, (-1, 1, 1, 1))
         # Sum all positives in a batch for normalization and avoid zero
         # num_positives_sum, which would lead to inf loss during training
         num_positives_sum = num_positives.sum() + 1.0
@@ -188,7 +193,8 @@ class DetectionLoss(nn.Module):
                 cls_outputs[l].permute(0, 2, 3, 1),
                 cls_targets_at_level_oh,
                 num_positives_sum,
-                alpha=self.alpha, gamma=self.gamma)
+                alpha=self.alpha, gamma=self.gamma,
+                has_box=has_box)
             cls_loss = cls_loss.view(bs, height, width, -1, self.num_classes)
             cls_loss *= (cls_targets_at_level != -2).unsqueeze(-1).float()
             cls_losses.append(cls_loss.sum())
@@ -197,7 +203,9 @@ class DetectionLoss(nn.Module):
                 box_outputs[l].permute(0, 2, 3, 1),
                 box_targets_at_level,
                 num_positives_sum,
-                delta=self.delta))
+                delta=self.delta,
+                has_box=has_box)
+                )
 
         # Sum per level losses to total loss.
         cls_loss = torch.sum(torch.stack(cls_losses, dim=-1), dim=-1)
@@ -217,7 +225,7 @@ class DetectionClassificationLoss(nn.Module):
         self.classification_loss_weight = config.classification_loss_weight
         self.classification_loss = nn.CrossEntropyLoss()
 
-    def forward(self, cls_outputs, box_outputs, classification_outputs, cls_targets, box_targets, classification_targets, num_positives):
+    def forward(self, cls_outputs, box_outputs, classification_outputs, cls_targets, box_targets, classification_targets, num_positives, has_box=None):
         """Computes total detection loss.
         Computes total detection loss including box and class loss from all levels.
         Args:
@@ -247,7 +255,7 @@ class DetectionClassificationLoss(nn.Module):
         else:
             # targets are already tensors
             stack_targets = False
-
+        has_box = torch.reshape(has_box, (-1, 1, 1, 1))
         # Sum all positives in a batch for normalization and avoid zero
         # num_positives_sum, which would lead to inf loss during training
         num_positives_sum = num_positives.sum() + 1.0
@@ -276,7 +284,8 @@ class DetectionClassificationLoss(nn.Module):
                 cls_outputs[l].permute(0, 2, 3, 1),
                 cls_targets_at_level_oh,
                 num_positives_sum,
-                alpha=self.alpha, gamma=self.gamma)
+                alpha=self.alpha, gamma=self.gamma,
+                has_box=has_box)
             cls_loss = cls_loss.view(bs, height, width, -1, self.num_classes)
             cls_loss *= (cls_targets_at_level != -2).unsqueeze(-1).float()
             cls_losses.append(cls_loss.sum())
@@ -285,7 +294,9 @@ class DetectionClassificationLoss(nn.Module):
                 box_outputs[l].permute(0, 2, 3, 1),
                 box_targets_at_level,
                 num_positives_sum,
-                delta=self.delta))
+                delta=self.delta,
+                has_box=has_box)
+                )
 
         # Sum per level losses to total loss.
         cls_loss = torch.sum(torch.stack(cls_losses, dim=-1), dim=-1)
