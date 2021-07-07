@@ -207,7 +207,7 @@ class DetectionLoss(nn.Module):
 
 class DetectionClassificationLoss(nn.Module):
     def __init__(self, config):
-        super(DetectionLoss, self).__init__()
+        super(DetectionClassificationLoss, self).__init__()
         self.config = config
         self.num_classes = config.num_classes
         self.alpha = config.alpha
