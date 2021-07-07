@@ -362,12 +362,12 @@ class ClassificationHead(nn.Module):
         self.model = nn.Sequential(
           nn.AdaptiveAvgPool2d(output_size=1),
           nn.Dropout(p=0.4, inplace=False),
+          nn.Flatten(),
           nn.Linear(512, num_classes, bias=True)
         )
 
     def forward(self, x):
         return self.model(x)
-
 
 def _init_weight(m, n='', ):
     """ Weight initialization as per Tensorflow official implementations.
@@ -485,7 +485,12 @@ class EfficientDetCls(nn.Module):
 
     def forward(self, x):
         x = self.backbone(x)
-        x_classification = self.classification(x)
+        # x is a list of 3 tensors with sizes:
+        # torch.Size([batch_size, 64, 64, 64])
+        # torch.Size([batch_size, 176, 32, 32])
+        # torch.Size([batch_size, 512, 16, 16])
+        # we'll use the last one in our case 
+        x_classification = self.classification(x[-1]) 
         x = self.fpn(x)
         x_class = self.class_net(x)
         x_box = self.box_net(x)

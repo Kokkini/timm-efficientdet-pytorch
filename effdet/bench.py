@@ -162,13 +162,15 @@ class DetBenchTrainClsAndDet(nn.Module):
 
     def forward(self, x, gt_boxes, gt_labels, gt_classifications, has_box, include_pred=False):
         class_out, box_out, classification_out = self.model(x)
-        class_out_pred, box_out_pred, indices, classes = _post_process(self.config, class_out, box_out)
+        has_box = torch.reshape(has_box, (-1, 1, 1, 1))
         
         for i in range(len(class_out)):
             class_out[i] *= has_box
         for i in range(len(box_out)):
             box_out[i] *= has_box
-
+            
+        class_out_pred, box_out_pred, indices, classes = _post_process(self.config, class_out, box_out)
+        
         cls_targets = []
         box_targets = []
         num_positives = []

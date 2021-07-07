@@ -102,10 +102,10 @@ def _class_loss(cls_outputs, cls_targets, num_positives, alpha=0.25, gamma=2.0):
     classification_loss = focal_loss(cls_outputs, cls_targets, alpha, gamma, normalizer)
     return classification_loss
 
-def _classification_loss(classification_outputs, classification_targets):
-    """Computes classification loss."""
-    classification_loss = focal_loss(classification_outputs, classification_targets)
-    return classification_loss
+# def _classification_loss(classification_outputs, classification_targets):
+#     """Computes classification loss."""
+#     classification_loss = focal_loss(classification_outputs, classification_targets)
+#     return classification_loss
 
 def _box_loss(box_outputs, box_targets, num_positives, delta=0.1):
     """Computes box regression loss."""
@@ -290,6 +290,7 @@ class DetectionClassificationLoss(nn.Module):
         # Sum per level losses to total loss.
         cls_loss = torch.sum(torch.stack(cls_losses, dim=-1), dim=-1)
         box_loss = torch.sum(torch.stack(box_losses, dim=-1), dim=-1)
+        classification_targets = classification_targets.to(torch.int64)
         classification_loss = self.classification_loss(classification_outputs, classification_targets)
         total_loss = cls_loss + self.box_loss_weight * box_loss + self.classification_loss_weight * classification_loss
         return total_loss, cls_loss, box_loss, classification_loss
