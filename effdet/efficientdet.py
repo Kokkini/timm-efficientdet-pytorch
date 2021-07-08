@@ -356,12 +356,12 @@ class HeadNet(nn.Module):
         return outputs
 
 class ClassificationHead(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, dropout=0.4):
         super(ClassificationHead, self).__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
         self.model = nn.Sequential(
           nn.AdaptiveAvgPool2d(output_size=1),
-          nn.Dropout(p=0.4, inplace=False),
+          nn.Dropout(p=dropout, inplace=False),
           nn.Flatten(),
           nn.Linear(512, num_classes, bias=True)
         )

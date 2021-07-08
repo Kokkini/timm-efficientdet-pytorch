@@ -179,3 +179,25 @@ class DetBenchTrainClsAndDet(nn.Module):
             return (torch.stack(batch_detections, dim=0), classification_out) + losses
 
         return losses
+
+class DetClsBenchEval(nn.Module):
+    def __init__(self, model, config):
+        super(DetBenchEval, self).__init__()
+        self.config = config
+        self.model = model
+        self.anchors = Anchors(
+            config.min_level, config.max_level,
+            config.num_scales, config.aspect_ratios,
+            config.anchor_scale, config.image_size)
+
+    def forward(self, x, image_scales):
+        class_out, box_out, classification_out = self.model(x)
+        class_out, box_out, indices, classes = _post_process(self.config, class_out, box_out)
+
+        batch_detections = []
+        # FIXME we may be able to do this as a batch with some tensor reshaping/indexing, PR welcome
+        for i in range(x.shape[0]):
+            detections = generate_detections(
+                class_out[i], box_out[i], self.anchors.boxes, indices[i].to(torch.int64), classes[i], image_scales[i])
+            batch_detections.append(detections)
+        return torch.stack(batch_detections, dim=0), classification_out
