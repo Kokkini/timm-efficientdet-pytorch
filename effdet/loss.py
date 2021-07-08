@@ -132,6 +132,7 @@ class DetectionLoss(nn.Module):
         self.gamma = config.gamma
         self.delta = config.delta
         self.box_loss_weight = config.box_loss_weight
+        self.cls_loss_weight = config.cls_loss_weight
 
     def forward(self, cls_outputs, box_outputs, cls_targets, box_targets, num_positives, has_box=None):
         """Computes total detection loss.
@@ -210,7 +211,7 @@ class DetectionLoss(nn.Module):
         # Sum per level losses to total loss.
         cls_loss = torch.sum(torch.stack(cls_losses, dim=-1), dim=-1)
         box_loss = torch.sum(torch.stack(box_losses, dim=-1), dim=-1)
-        total_loss = cls_loss + self.box_loss_weight * box_loss
+        total_loss = self.cls_loss_weight * cls_loss + self.box_loss_weight * box_loss
         return total_loss, cls_loss, box_loss
 
 class DetectionClassificationLoss(nn.Module):
@@ -223,6 +224,7 @@ class DetectionClassificationLoss(nn.Module):
         self.delta = config.delta
         self.box_loss_weight = config.box_loss_weight
         self.classification_loss_weight = config.classification_loss_weight
+        self.cls_loss_weight = config.cls_loss_weight
         self.classification_loss = nn.CrossEntropyLoss()
 
     def forward(self, cls_outputs, box_outputs, classification_outputs, cls_targets, box_targets, classification_targets, num_positives, has_box=None):
@@ -303,6 +305,6 @@ class DetectionClassificationLoss(nn.Module):
         box_loss = torch.sum(torch.stack(box_losses, dim=-1), dim=-1)
         classification_targets = classification_targets.to(torch.int64)
         classification_loss = self.classification_loss(classification_outputs, classification_targets)
-        total_loss = cls_loss + self.box_loss_weight * box_loss + self.classification_loss_weight * classification_loss
+        total_loss = self.cls_loss_weight * cls_loss + self.box_loss_weight * box_loss + self.classification_loss_weight * classification_loss
         return total_loss, cls_loss, box_loss, classification_loss
 
