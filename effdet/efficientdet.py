@@ -405,7 +405,7 @@ class ClassificationHead2Layers(nn.Module):
     def __init__(self, num_classes, dropout=0.4):
         super(ClassificationHead2Layers, self).__init__()
         self.model = nn.Sequential(
-          Conv2dStaticSamePadding(512, 2048, kernel_size=(1,1), bias=False),
+          Conv2dStaticSamePadding(512, 2048, kernel_size=(1,1), bias=False, image_size=16),
           nn.BatchNorm2d(2048,eps=0.001, momentum=0.01),
           nn.AdaptiveAvgPool2d(output_size=1),
           nn.Dropout(p=dropout, inplace=False),
