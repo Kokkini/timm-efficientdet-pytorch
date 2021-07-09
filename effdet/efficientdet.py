@@ -371,7 +371,7 @@ class ClassificationHead(nn.Module):
 
 class ClassificationHead3Inputs(nn.Module):
     def __init__(self, num_classes, dropout=0.4):
-        super(ClassificationHead, self).__init__()
+        super(ClassificationHead3Inputs, self).__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
         self.model1 = nn.Sequential(
           nn.AdaptiveAvgPool2d(output_size=1),
