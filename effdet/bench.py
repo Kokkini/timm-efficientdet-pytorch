@@ -182,7 +182,7 @@ class DetBenchTrainClsAndDet(nn.Module):
 
 class DetClsBenchEval(nn.Module):
     def __init__(self, model, config):
-        super(DetBenchEval, self).__init__()
+        super(DetClsBenchEval, self).__init__()
         self.config = config
         self.model = model
         self.anchors = Anchors(

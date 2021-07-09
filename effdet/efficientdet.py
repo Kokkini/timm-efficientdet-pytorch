@@ -369,6 +369,41 @@ class ClassificationHead(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+class ClassificationHead3Inputs(nn.Module):
+    def __init__(self, num_classes, dropout=0.4):
+        super(ClassificationHead, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
+        self.model1 = nn.Sequential(
+          nn.AdaptiveAvgPool2d(output_size=1),
+          nn.Dropout(p=dropout, inplace=False),
+          nn.Flatten(),
+          nn.Linear(64, 128, bias=True),
+          nn.SiLU()
+        )
+        self.model2 = nn.Sequential(
+          nn.AdaptiveAvgPool2d(output_size=1),
+          nn.Dropout(p=dropout, inplace=False),
+          nn.Flatten(),
+          nn.Linear(176, 128, bias=True),
+          nn.SiLU()
+        )
+        self.model3 = nn.Sequential(
+          nn.AdaptiveAvgPool2d(output_size=1),
+          nn.Dropout(p=dropout, inplace=False),
+          nn.Flatten(),
+          nn.Linear(512, 128, bias=True),
+          nn.SiLU()
+        )
+        self.linear = nn.Linear(384, num_classes, bias=True)
+
+    def forward(self, x):
+        x1 = self.model1(x[0])
+        x2 = self.model2(x[1])
+        x3 = self.model3(x[2])
+        x = torch.cat([x1, x2, x3], -1)
+        x = self.linear(x)
+        return x
+
 def _init_weight(m, n='', ):
     """ Weight initialization as per Tensorflow official implementations.
     """
@@ -491,6 +526,37 @@ class EfficientDetCls(nn.Module):
         # torch.Size([batch_size, 512, 16, 16])
         # we'll use the last one in our case 
         x_classification = self.classification(x[-1]) 
+        x = self.fpn(x)
+        x_class = self.class_net(x)
+        x_box = self.box_net(x)
+        return x_class, x_box, x_classification
+
+class EfficientDetCls3Inputs(nn.Module):
+    def __init__(self, config, norm_kwargs=None, pretrained_backbone=True):
+        super(EfficientDetCls3Inputs, self).__init__()
+        norm_kwargs = norm_kwargs or dict(eps=.001, momentum=.01)
+        self.backbone = create_model(
+            config.backbone_name, features_only=True, out_indices=(2, 3, 4),
+            pretrained=pretrained_backbone, **config.backbone_args)
+        feature_info = [dict(num_chs=f['num_chs'], reduction=f['reduction'])
+                        for i, f in enumerate(self.backbone.feature_info())]
+        self.fpn = BiFpn(config, feature_info, norm_kwargs=norm_kwargs)
+        self.class_net = HeadNet(config, num_outputs=config.num_classes, norm_kwargs=norm_kwargs)
+        self.box_net = HeadNet(config, num_outputs=4, norm_kwargs=norm_kwargs)
+        print("num_classes", config.num_classification_classes)
+        self.classification = None
+
+        for n, m in self.named_modules():
+            if 'backbone' not in n:
+                _init_weight(m, n)
+
+    def forward(self, x):
+        x = self.backbone(x)
+        # x is a list of 3 tensors with sizes:
+        # torch.Size([batch_size, 64, 64, 64])
+        # torch.Size([batch_size, 176, 32, 32])
+        # torch.Size([batch_size, 512, 16, 16])
+        x_classification = self.classification(x) 
         x = self.fpn(x)
         x_class = self.class_net(x)
         x_box = self.box_net(x)
