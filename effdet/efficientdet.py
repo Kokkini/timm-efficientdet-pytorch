@@ -7,10 +7,13 @@ Hacked together by Ross Wightman
 """
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
+
 import logging
 import math
 from collections import OrderedDict
 from typing import List
+from torch.nn.modules.batchnorm import BatchNorm2d
 
 from torch.nn.modules.dropout import Dropout
 from timm import create_model
@@ -306,6 +309,35 @@ class BiFpn(nn.Module):
         x = self.cell(x)
         return x
 
+class Conv2dStaticSamePadding(nn.Conv2d):
+    """2D Convolutions like TensorFlow's 'SAME' mode, with the given input image size.
+       The padding mudule is calculated in construction function, then used in forward.
+    """
+
+    # With the same calculation as Conv2dDynamicSamePadding
+
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, image_size=None, **kwargs):
+        super().__init__(in_channels, out_channels, kernel_size, stride, **kwargs)
+        self.stride = self.stride if len(self.stride) == 2 else [self.stride[0]] * 2
+
+        # Calculate padding based on image size and save it
+        assert image_size is not None
+        ih, iw = (image_size, image_size) if isinstance(image_size, int) else image_size
+        kh, kw = self.weight.size()[-2:]
+        sh, sw = self.stride
+        oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
+        pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
+        pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
+        if pad_h > 0 or pad_w > 0:
+            self.static_padding = nn.ZeroPad2d((pad_w // 2, pad_w - pad_w // 2,
+                                                pad_h // 2, pad_h - pad_h // 2))
+        else:
+            self.static_padding = nn.Identity()
+
+    def forward(self, x):
+        x = self.static_padding(x)
+        x = F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        return x
 
 class HeadNet(nn.Module):
     def __init__(self, config, num_outputs, norm_layer=nn.BatchNorm2d, norm_kwargs=None, act_layer=_ACT_LAYER):
@@ -358,12 +390,27 @@ class HeadNet(nn.Module):
 class ClassificationHead(nn.Module):
     def __init__(self, num_classes, dropout=0.4):
         super(ClassificationHead, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
+        # self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
         self.model = nn.Sequential(
           nn.AdaptiveAvgPool2d(output_size=1),
           nn.Dropout(p=dropout, inplace=False),
           nn.Flatten(),
           nn.Linear(512, num_classes, bias=True)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+class ClassificationHead2Layers(nn.Module):
+    def __init__(self, num_classes, dropout=0.4):
+        super(ClassificationHead2Layers, self).__init__()
+        self.model = nn.Sequential(
+          Conv2dStaticSamePadding(512, 2048, kernel_size=(1,1), bias=False),
+          nn.BatchNorm2d(2048,eps=0.001, momentum=0.01),
+          nn.AdaptiveAvgPool2d(output_size=1),
+          nn.Dropout(p=dropout, inplace=False),
+          nn.Flatten(),
+          nn.Linear(2048, num_classes, bias=True)
         )
 
     def forward(self, x):
