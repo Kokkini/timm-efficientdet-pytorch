@@ -164,8 +164,8 @@ class DetectionLoss(nn.Module):
         else:
             # targets are already tensors
             stack_targets = False
-        
-        has_box = torch.reshape(has_box, (-1, 1, 1, 1))
+        if has_box is not None:
+            has_box = torch.reshape(has_box, (-1, 1, 1, 1))
         # Sum all positives in a batch for normalization and avoid zero
         # num_positives_sum, which would lead to inf loss during training
         num_positives_sum = num_positives.sum() + 1.0
@@ -257,7 +257,8 @@ class DetectionClassificationLoss(nn.Module):
         else:
             # targets are already tensors
             stack_targets = False
-        has_box = torch.reshape(has_box, (-1, 1, 1, 1))
+        if has_box is not None:
+            has_box = torch.reshape(has_box, (-1, 1, 1, 1))
         # Sum all positives in a batch for normalization and avoid zero
         # num_positives_sum, which would lead to inf loss during training
         num_positives_sum = num_positives.sum() + 1.0
