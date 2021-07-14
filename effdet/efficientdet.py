@@ -528,7 +528,7 @@ class EfficientDet(nn.Module):
             config.backbone_name, features_only=True, out_indices=(2, 3, 4),
             pretrained=pretrained_backbone, **config.backbone_args)
         feature_info = [dict(num_chs=f['num_chs'], reduction=f['reduction'])
-                        for i, f in enumerate(self.backbone.feature_info())]
+                        for i, f in enumerate(self.backbone.feature_info.get_dicts())]
         self.fpn = BiFpn(config, feature_info, norm_kwargs=norm_kwargs)
         self.class_net = HeadNet(config, num_outputs=config.num_classes, norm_kwargs=norm_kwargs)
         self.box_net = HeadNet(config, num_outputs=4, norm_kwargs=norm_kwargs)
@@ -554,7 +554,7 @@ class EfficientDetCls(nn.Module):
             config.backbone_name, features_only=True, out_indices=(2, 3, 4),
             pretrained=pretrained_backbone, **config.backbone_args)
         feature_info = [dict(num_chs=f['num_chs'], reduction=f['reduction'])
-                        for i, f in enumerate(self.backbone.feature_info())]
+                        for i, f in enumerate(self.backbone.feature_info.get_dicts())]
         self.fpn = BiFpn(config, feature_info, norm_kwargs=norm_kwargs)
         self.class_net = HeadNet(config, num_outputs=config.num_classes, norm_kwargs=norm_kwargs)
         self.box_net = HeadNet(config, num_outputs=4, norm_kwargs=norm_kwargs)
@@ -586,7 +586,7 @@ class EfficientDetCls3Inputs(nn.Module):
             config.backbone_name, features_only=True, out_indices=(2, 3, 4),
             pretrained=pretrained_backbone, **config.backbone_args)
         feature_info = [dict(num_chs=f['num_chs'], reduction=f['reduction'])
-                        for i, f in enumerate(self.backbone.feature_info())]
+                        for i, f in enumerate(self.backbone.feature_info.get_dicts())]
         self.fpn = BiFpn(config, feature_info, norm_kwargs=norm_kwargs)
         self.class_net = HeadNet(config, num_outputs=config.num_classes, norm_kwargs=norm_kwargs)
         self.box_net = HeadNet(config, num_outputs=4, norm_kwargs=norm_kwargs)
