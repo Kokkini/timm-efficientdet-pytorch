@@ -77,6 +77,8 @@ def default_detection_configs():
     # localization loss
     h.delta = 0.1
     h.box_loss_weight = 50.0
+    h.cls_loss_weight = 1.0
+    h.classification_loss_weight = 0.0
 
     h.lr_decay_method = 'cosine'
     h.moving_average_decay = 0.9998
